@@ -1,6 +1,6 @@
 import torch
 import argparse
-from transformers import AutoModelWithLMHead, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
@@ -20,7 +20,7 @@ class RandomSentencesDataset(Dataset):
 
 def train_model(num_epochs, learning_rate, model_name, training_sentences, batch_size):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelWithLMHead.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -57,13 +57,22 @@ def train_model(num_epochs, learning_rate, model_name, training_sentences, batch
     return model, tokenizer
 
 
-def generate_sentences(model, tokenizer, input_text, num_sentences=5, max_length=50, do_sample=True, temperature=1.0):
+def generate_sentences(model, tokenizer, input_text, num_sentences=5, max_length=50, do_sample=True, num_beams=5, top_k=0, top_p=0.9, temperature=1.0):
     model.eval()
     generated_sentences = []
     for _ in range(num_sentences):
         inputs = tokenizer([input_text], return_tensors="pt").to(model.device)
         with torch.no_grad():
-            outputs = model.generate(**inputs, max_length=max_length, do_sample=do_sample, temperature=temperature, pad_token_id=tokenizer.eos_token_id)
+            outputs = model.generate(
+                **inputs,
+                max_length=max_length,
+                do_sample=do_sample,
+                temperature=temperature,
+                num_beams=num_beams,
+                top_k=top_k,
+                top_p=top_p,
+                pad_token_id=tokenizer.eos_token_id
+            )
             generated_sentence = tokenizer.decode(outputs[0], skip_special_tokens=True)
             generated_sentences.append(generated_sentence)
 
@@ -80,11 +89,14 @@ if __name__ == "__main__":
     parser.add_argument("--train_csv_path", type=str, default="data.csv", help="training data")
 
     # Inference parameters
-    parser.add_argument("--num_sentences", type=int, default=1, help="Number of sentences to generate")
+    parser.add_argument("-n", "--num_sentences", type=int, default=1, help="Number of sentences to generate")
+    parser.add_argument("--num_beams", type=int, default=5, help="For beam search")
+    parser.add_argument("--k", type=int, default=0)
+    parser.add_argument("--p", type=float, default=0.9)
     parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the generated sentences")
     parser.add_argument("--do_sample", action="store_true", help="Whether to use sampling during sentence generation")
     parser.add_argument("--temperature", type=float, default=1.0, help="Sampling temperature during sentence generation")
-    parser.add_argument("--date", type=str, default="2022/1/1", help="date")
+    parser.add_argument("--date", type=str, default="111/1/2", help="date")
     args = parser.parse_args()
 
     if args.mode == "train":
@@ -101,13 +113,24 @@ if __name__ == "__main__":
 
     elif args.mode == "generate":
         # Load the model
-        model = AutoModelWithLMHead.from_pretrained("random_sentence_generator")
+        model = AutoModelForCausalLM.from_pretrained("random_sentence_generator")
         tokenizer = AutoTokenizer.from_pretrained("random_sentence_generator")
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
 
         # Generate sentences using the loaded model with specified inference parameters
-        generated_sentences = generate_sentences(model, tokenizer, args.date, num_sentences=args.num_sentences, max_length=args.max_length, do_sample=args.do_sample, temperature=args.temperature)
+        generated_sentences = generate_sentences(
+            model,
+            tokenizer,
+            args.date,
+            num_sentences=args.num_sentences,
+            max_length=args.max_length,
+            do_sample=args.do_sample,
+            num_beams=args.num_beams,
+            top_k=args.k,
+            top_p=args.p,
+            temperature=args.temperature
+        )
 
         # Output the results
         print("=== Generated Sentences ===")
