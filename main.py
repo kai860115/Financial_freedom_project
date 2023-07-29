@@ -52,14 +52,14 @@ def train_model(num_epochs, learning_rate, model_name, training_sentences, batch
 
         print(f"Epoch {epoch+1}, Loss: {total_loss / len(dataloader)}")
 
-        sentences = generate_sentences(model, tokenizer, "112/7/21", num_sentences=5, max_length=50, do_sample=True, temperature=1.0)
+        sentences = generate_sentences(model, tokenizer, training_sentences[-1][31:], num_sentences=5, max_length=200, do_sample=True, temperature=1.0)
         for s in sentences:
             print(s)
 
     return model, tokenizer
 
 
-def generate_sentences(model, tokenizer, input_text, num_sentences=5, max_length=50, do_sample=True, num_beams=5, top_k=0, top_p=0.9, temperature=1.0):
+def generate_sentences(model, tokenizer, input_text, num_sentences=5, max_length=200, do_sample=True, num_beams=5, top_k=0, top_p=0.9, temperature=1.0):
     model.eval()
     generated_sentences = []
     for _ in range(num_sentences):
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate for training")
     parser.add_argument("--model_name", type=str, default="gpt2", help="Name of the pre-trained model")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
-    parser.add_argument("--train_data_path", type=str, default="lotto649.csv", help="training data")
+    parser.add_argument("--train_data_path", type=str, default="lotto649.json", help="training data")
     parser.add_argument("--prev_num", type=int, default=5, help="prev lottery num")
 
     # Inference parameters
@@ -96,10 +96,10 @@ if __name__ == "__main__":
     parser.add_argument("--num_beams", type=int, default=5, help="For beam search")
     parser.add_argument("--k", type=int, default=0)
     parser.add_argument("--p", type=float, default=0.9)
-    parser.add_argument("--max_length", type=int, default=20, help="Maximum length of the generated sentences")
+    parser.add_argument("--max_length", type=int, default=200, help="Maximum length of the generated sentences")
     parser.add_argument("--do_sample", action="store_true", help="Whether to use sampling during sentence generation")
     parser.add_argument("--temperature", type=float, default=1.0, help="Sampling temperature during sentence generation")
-    parser.add_argument("--date", type=str, default="111/1/2", help="date")
+    parser.add_argument("--date", type=str, default="112/07/18,34,19,04,40,05,16,10|112/07/21,03,15,35,41,49,39,38|112/07/25,17,33,40,12,28,45,39|112/07/28,03,22,25,34,44,01,32", help="date")
     args = parser.parse_args()
 
     if args.mode == "train":
@@ -108,10 +108,15 @@ if __name__ == "__main__":
         df['獎號'] = df['獎號'].apply(lambda x: ','.join(str(e) for e in x))
         df['特別號'] = df['特別號'].apply(lambda x: str(x) if x >= 10 else '0' + str(x))
         sentences = df[["開獎日期" ,"獎號", "特別號"]].apply(",".join, axis=1).tolist()
+        sentences.sort()
+
         training_sentences = []
 
-        for i in range(len(sentences) - args.prev_num):
+        for i in range(len(sentences) - args.prev_num + 1):
             training_sentences.append("|".join(sentences[i : i + args.prev_num]))
+
+        for i in range(5):
+            print(training_sentences[i])
 
         model, tokenizer = train_model(args.num_epochs, args.learning_rate, args.model_name, training_sentences, args.batch_size)
 

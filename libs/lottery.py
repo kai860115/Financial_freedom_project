@@ -145,7 +145,5 @@ class Lottery():
             time.sleep(random.random())
             datas += self.lotto649(isPrintData, isOutput, utils.monthDiff(i))
             logging.debug(str(utils.monthDiff(i)[0]) + '_' +  str(utils.monthDiff(i)[1]))
-        print("datas")
-        print(len(datas))
         if isMixOutput:
             utils.outputToJson("lotto649", datas)
