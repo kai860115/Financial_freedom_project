@@ -2,3 +2,6 @@ transformers==4.31.0
 torch==2.0.1
 tqdm
 numpy
+requests==2.31.0
+beautifulsoup4==4.9.1
+terminaltables==3.1.0
