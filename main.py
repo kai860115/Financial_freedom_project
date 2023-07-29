@@ -1,8 +1,10 @@
 import torch
 import argparse
+import os
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
+import pandas as pd
 
 class RandomSentencesDataset(Dataset):
     def __init__(self, sentences, tokenizer, max_length=128):
@@ -21,7 +23,7 @@ class RandomSentencesDataset(Dataset):
 def train_model(num_epochs, learning_rate, model_name, training_sentences, batch_size):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
     model.to(device)
 
     if tokenizer.pad_token is None:
@@ -86,7 +88,8 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate for training")
     parser.add_argument("--model_name", type=str, default="gpt2", help="Name of the pre-trained model")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
-    parser.add_argument("--train_csv_path", type=str, default="data.csv", help="training data")
+    parser.add_argument("--train_data_path", type=str, default="lotto649.csv", help="training data")
+    parser.add_argument("--prev_num", type=int, default=5, help="prev lottery num")
 
     # Inference parameters
     parser.add_argument("-n", "--num_sentences", type=int, default=1, help="Number of sentences to generate")
@@ -101,21 +104,29 @@ if __name__ == "__main__":
 
     if args.mode == "train":
         # Training
-        with open(args.train_csv_path, 'r') as f:
-            training_sentences = [line.strip() for line in f.readlines()]
+        df = pd.read_json(args.train_data_path)
+        df['獎號'] = df['獎號'].apply(lambda x: ','.join(str(e) for e in x))
+        df['特別號'] = df['特別號'].apply(lambda x: str(x) if x >= 10 else '0' + str(x))
+        sentences = df[["開獎日期" ,"獎號", "特別號"]].apply(",".join, axis=1).tolist()
+        training_sentences = []
+
+        for i in range(len(sentences) - args.prev_num):
+            training_sentences.append("|".join(sentences[i : i + args.prev_num]))
 
         model, tokenizer = train_model(args.num_epochs, args.learning_rate, args.model_name, training_sentences, args.batch_size)
 
         # Save the model
-        model_save_path = "random_sentence_generator"
+        os.makedirs("ckpt", exist_ok=True)
+        model_save_path = os.path.join("ckpt", args.model_name)
         model.save_pretrained(model_save_path)
         tokenizer.save_pretrained(model_save_path)
 
     elif args.mode == "generate":
         # Load the model
-        model = AutoModelForCausalLM.from_pretrained("random_sentence_generator")
-        tokenizer = AutoTokenizer.from_pretrained("random_sentence_generator")
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model_save_path = os.path.join("ckpt", args.model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_save_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_save_path)
+        device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
         model.to(device)
 
         # Generate sentences using the loaded model with specified inference parameters
